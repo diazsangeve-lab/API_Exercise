@@ -1,0 +1,175 @@
+---
+output:
+  md_document:
+    variant: markdown_github
+---
+
+# Purpose
+
+The purpose of this folder is to practice using an application programming interface for my econometrics tutorial.
+
+```{r}
+
+rm(list = ls()) # Clean your environment:
+gc() # garbage collection - It can be useful to call gc after a large object has been removed, as this may prompt R to return memory to the operating system.
+library(tidyverse)
+if (!require("pacman", quietly = TRUE )) {
+    install.packages("pacman")
+    library(pacman)
+}
+if (!require("tibble", quietly = TRUE )) {
+    install.packages("tibble")
+    library(tibble)
+}
+
+if (!require("knitr", quietly = TRUE )) {
+    install.packages("knitr")
+    library(knitr)
+}
+
+p_load(wbstats,WDI,tidyverse,haven)
+
+list.files('code/', full.names = T, recursive = T) %>% .[grepl('.R', .)] %>% as.list() %>% walk(~source(.))
+```
+
+# Setup
+
+```{r}
+# Verify that the packages are ready (UNCOMMENT IF YOU WANT TO)
+#library(help="WDI") # lists functions in the WDI package
+#wbstats::wb_cachelist # glimpse of cached World Bank metadata
+#WDI::WDI_data # explore WDI data structures
+```
+
+# Finding Indicator Codes
+
+Each World Banking indicator has a unique alphanumeric code (e.g., NY.GDP.PCAP.KD). The code is the key that the API uses to retrieve the correct seires. Both wbstats and WDI provide search function.
+
+## Usng *wbstats* (Recommended)
+
+```{r}
+# Search for indicators containing "GDP"
+gdp_indicators <- wb_search("GDP")
+head(gdp_indicators)
+
+# Narrow search to "GDP per capita "
+gdp_pc <- wb_search("GDP per capita")
+head(gdp_pc) #interactive table viewer in RStudio
+
+# Important columns :
+ # indicator _id -> code for wb_ data ()
+ # indicator -> human - readable description
+ # unit -> measurement unit (e.g., " constant 2015 US$")
+```
+
+## Using *WDI* (Classic)
+
+```{r}
+# Search for indicators containing " inflation "
+WDIsearch("inflation")
+```
+
+# Understanding Indicator Code Suffixes
+
+The suffix of an indicator code encodes crucial information about the unit, adjustment method, and base year. Misinterpreting suffixes is a common source of errors in empirical work.
+
+```{r}
+# Create the data
+wb_data <- tribble(
+  ~Suffix, ~`Meaning and Appropriate Use`,
+  ".CD", "Current USD (nominal). Affected by both inflation and exchange rate movements.",
+  ".KD", "Constant USD (real, inflation-adjusted). Base year is usually 2015.",
+  ".PP.CD", "PPP-adjusted, current international dollars. Corrects for cross-country price levels.",
+  ".PP.KD", "PPP-adjusted, constant international dollars. Combines inflation adjustment with PPP.",
+  ".ZS", "Percentage share (ratio). Already unit-free (e.g., trade as % of GDP).",
+  ".GD", "Share of GDP. Similar to .ZS but explicitly relative to GDP.",
+  ".LN", "Natural logarithm of the underlying series. Used in internal calculations.",
+  ".MA", "Moving average or smoothed series. Indicates values have been smoothed.",
+  ".DT", "Decadal data (e.g., population census every 10 years).",
+  ".AR", "Annual Report data. May differ from standard series due to reporting.",
+  ".EST", "Estimated value (not directly reported). Used to fill gaps."
+)
+
+# Generate a Markdown-compatible table
+kable(wb_data, format = "markdown", caption = "Table 1: World Bank Indicator Suffixes")
+```
+
+**Economist's rule of thumb**:
+
+- Coss-Country level comparison -\> use .PP.CD or .PP.KD (PPP-adjusted).
+
+- Growth over time within a country -\> use .KD (constant/real).
+
+- Policy reports in nominal USD -\> .CD (current/nominal).
+
+# Country Codes and Time Granularity
+
+## ISO Country Code: ISO2 vs ISO3
+
+The WB API accepts both two-letter and three-letter country codes:
+
+- **ISO2**: Often used in plots and quick identification.
+
+- **ISO3**: More informative and are the standard for merging with other international datasets(such as UN, IMF, or Penn Word Tables)
+
+## Time Granularity in API Calls
+
+The wbstats package automatically handles the format, but when constructing raw API calls, you must specify dates correctly:
+
+- **Annual data**: Use YYYY
+
+- **Quarterly data**: Use YYYYQ (2020Q1)
+
+- **Monthly data**: Use YYYM (2020M01)
+
+# Downloading Data: Core Workflow
+
+## Using wbstats
+
+```{r}
+# Define indicators using a named vector ( names become column names )
+my_indicators <- c(
+gdp_per_capita = "NY.GDP.PCAP.KD", # constant 2015 USD
+inflation = "FP.CPI.TOTL.ZG", # annual CPI inflation (%)
+trade_openness = "NE.TRD.GNFS.ZS", # trade as % of GDP
+school_enroll = "SE.SEC.ENRR" # secondary gross enrolment ratio
+)
+
+# Specify countries ( ISO2 or ISO3 codes )
+ my_countries <- c("ZA","NG","KE","GH","EG")
+
+ # Download data for 2000 -2023
+africa_data <- wb_data(indicator = my_indicators, country = my_countries, start_date = 2000, end_date = 2023)
+
+ # Inspect the structure
+ head(africa_data)
+ glimpse(africa_data) # displays column types and units
+```
+
+## Filtering by Region or Income Group
+
+```{r}
+# Retrieve country metadata
+country_info <- wb_countries()
+
+# Extract ISO3 codes for Sub - Saharan Africa
+ssa_countries <- country_info %>%
+filter(region == "Sub-Saharan Africa") %>%
+pull(iso3c)
+
+# Download GDP per capita for all SSA countries
+ssa_data <- wb_data (indicator = c(gdp_pc = "NY.GDP.PCAP.KD"), country = ssa_countries, start_date = 2000, end_date = 2022)
+# Approximately 48 countries 23 years = ~1 ,104 observations
+```
+
+## Understanding The Returned Dataframe
+
+wbstats returns a tidy dataframe where each row corresponds to one country-year observation. Key columns include:
+
+```{r}
+# Summarise missing values across all columns
+africa_data %>% summarise(across(everything(), ~ sum(is.na(.))))
+
+# Note : Missing data often reflects non - reporting , which may correlate with
+# institutional quality . Consider the implications for your analysis .
+```

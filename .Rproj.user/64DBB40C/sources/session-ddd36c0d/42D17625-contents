@@ -1,0 +1,6 @@
+gp_user=datascience
+gp_pass=datascience
+gp_host=102.222.21.138
+gp_port=16015
+
+FRED_API_KEY=19c1b99f598df905d96420b8ef035c93

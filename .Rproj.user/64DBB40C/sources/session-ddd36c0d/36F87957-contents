@@ -1,0 +1,218 @@
+---
+output:
+  md_document:
+    variant: markdown_github
+---
+
+# Purpose
+
+The purpose of this folder is to complete a collaborate exercise working with APIs for our Econometrics 871 class. 
+
+Students: Diaz Sangeve and Kimberleigh Nkosi
+
+```{r}
+
+rm(list = ls()) # Clean your environment:
+gc() # garbage collection - It can be useful to call gc after a large object has been removed, as this may prompt R to return memory to the operating system.
+
+# Installation of the required packages and loading them
+if (!require("tidyverse", quietly = TRUE )) {
+    install.packages("tidyverse")
+    library(tidyverse)
+}
+
+if (!require("fredr", quietly = TRUE )) {
+    install.packages("fredr")
+    library(fredr)
+}
+
+if (!require("scales", quietly = TRUE )) {
+    install.packages("scales")
+    library(scales)
+}
+
+if (!require("patchwork", quietly = TRUE )) {
+    install.packages("patchwork")
+    library(patchwork)
+}
+
+list.files('code/', full.names = T, recursive = T) %>% .[grepl('.R', .)] %>% as.list() %>% walk(~source(.))
+```
+
+# What We Are Analysing
+
+This analysis explores two related macroeconomic questions using data from the FRED API:
+
+**Question 1: How does South Africa's unemployment compare to Turkey's?**
+Both South Africa and Turkey are large emerging market economies that have experienced significant structural unemployment challenges. By comparing their unemployment rates over the period 2000–2023, we can assess whether South Africa's labour market challenges are unique or shared among similarly positioned economies.
+
+**Question 2: How does South Africa's monetary policy respond to inflation?**
+The South African Reserve Bank (SARB) operates under an inflation-targeting framework, with a target band of 3–6%. By plotting CPI inflation alongside the central bank policy rate over time, we can observe how the SARB adjusts interest rates in response to inflationary pressure.
+
+---
+
+# Variables Used
+
+| Variable | FRED Series ID | Description | Frequency |
+|---|---|---|---|
+| SA Unemployment Rate | `LRUN64TTZAQ156S` | Percentage of the labour force that is unemployed in South Africa (ILO estimate) | Quarterly |
+| Turkey Unemployment Rate | `LRUNTTTTTRQ156S` | Percentage of the labour force that is unemployed in Turkey (ILO estimate) | Quarterly |
+| SA CPI Inflation | `ZAFCPIALLMINMEI` | Consumer Price Index for all items in South Africa, used to measure year-on-year inflation | Monthly |
+| SA Policy Rate | `IRSTCB01ZAM156N` | South African Reserve Bank central bank policy rate, the primary monetary policy tool | Monthly |
+
+All series cover the period **2010–2023**.
+
+---
+
+# Using FRED API
+
+To use the API you need a free personal key. Obtain one at https://fred.stlouisfed.org/docs/api/api_key.html, then store it securely in your `.Renviron` file by running `usethis::edit_r_environ()` in your console, adding the line `FRED_API_KEY=your_key_here`, saving, and restarting R. This means the key is never visible in the script itself, keeping it secure when the project is shared or pushed to GitHub.
+
+## API Authetication
+
+```{r Auth}
+# Load API key securely from .Renviron
+fredr_set_key(Sys.getenv("FRED_API_KEY"))
+```
+
+## Loading Data
+
+We make four separate API calls to FRED — one for each variable. Each call specifies a `series_id` (the unique identifier for that data series), a start date, and an end date. A `country` label is added to the unemployment series so the two countries can be distinguished when the data is combined later.
+
+```{r fetch_data}
+# South Africa unemployment rate (quarterly, %)
+sa_unemp <- fredr(
+  series_id        = "LRUN64TTZAQ156S",
+  observation_start = as.Date("2010-01-01"),
+  observation_end   = as.Date("2023-12-31")
+) %>%
+  mutate(country = "South Africa")
+
+# Turkey unemployment rate (quarterly, %)
+tr_unemp <- fredr(
+  series_id         = "LRUNTTTTTRQ156S",
+  observation_start = as.Date("2010-01-01"),
+  observation_end   = as.Date("2023-12-31")
+) %>%
+  mutate(country = "Turkey")
+
+# South Africa CPI inflation (year-on-year %)
+sa_cpi <- fredr(
+  series_id        = "CPALTT01ZAM659N",
+  observation_start = as.Date("2010-01-01"),
+  observation_end   = as.Date("2023-12-31")
+)
+
+# South Africa Policy Rate (%)
+sa_rate <- fredr(
+  series_id         = "IRSTCB01ZAM156N",
+  observation_start = as.Date("2010-01-01"),
+  observation_end   = as.Date("2023-12-31")
+)
+```
+
+## Clean & Reshape Data
+
+Before plotting, the data needs to be cleaned and reshaped into tidy format — where each row is one observation and each column is one variable.
+
+For **Plot 1**, we stack the South Africa and Turkey unemployment data into a single dataframe using `bind_rows()`, then select only the columns we need and remove any missing values.
+
+For **Plot 2**, we join the CPI and policy rate series by date using `inner_join()`, which keeps only the dates that appear in both datasets. We then use `pivot_longer()` to reshape the data from wide format (two separate columns) into long format (one `indicator` column and one `value` column), which is the structure `ggplot2` requires for plotting multiple lines with a colour legend.
+
+```{r clean_data}
+# Plot 1 data: combining SA and Turkey unemployment
+unemp_combined <- bind_rows(sa_unemp, tr_unemp) %>%
+  select(date, value, country) %>% # Keep only relevant columns
+  rename(unemployment_rate = value) %>% # Renaming for clarity
+  filter(!is.na(unemployment_rate)) # Remove any missing observations
+
+# Plot 2 data: join CPI and lending rate for SA
+monetary_policy <- sa_cpi %>%
+  select(date, value) %>%
+  rename(inflation = value) %>%
+  inner_join(
+    sa_rate %>% select(date, value) %>% rename(prime_rate = value),
+    by = "date" # Join on matching dates only
+  ) %>%
+  filter(!is.na(inflation), !is.na(prime_rate)) %>%
+  pivot_longer(
+    cols      = c(inflation, prime_rate), # Reshape these two columns into long format
+    names_to  = "indicator",
+    values_to = "value"
+  ) %>%
+  mutate(indicator = recode(indicator, # Rename for readable plot labels
+    "inflation"  = "CPI Inflation (%)",
+    "prime_rate" = "Policy Rate (%)"
+  ))
+```
+
+# Creating the plots
+
+## Plot 1: Unemployment Rate — South Africa vs Turkey
+
+This plot compares the quarterly unemployment rate of South Africa and Turkey from 2010 to 2023. Each country is represented by a separate coloured line, allowing direct visual comparison of the level and trajectory of unemployment over time.
+
+```{r plot1, fig.width=10, fig.height=5}
+p1 <- ggplot(unemp_combined, aes(x = date, y = unemployment_rate, colour = country)) +
+  geom_line(linewidth = 0.9) +
+  scale_colour_manual(values = c("South Africa" = "#0072B2", "Turkey" = "#D55E00")) +
+  scale_y_continuous(labels = label_number(suffix = "%")) +
+  scale_x_date(date_breaks = "3 years", date_labels = "%Y") +
+  labs(
+    title    = "Unemployment Rate: South Africa vs Turkey (2000–2023)",
+    subtitle = "South Africa's unemployment rate has persistently exceeded Turkey's,\nhighlighting structural labour market challenges.",
+    x        = NULL,
+    y        = "Unemployment Rate (%)",
+    colour   = NULL,
+    caption  = "Source: FRED (ILO estimates)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position  = "top",
+    plot.title       = element_text(face = "bold"),
+    plot.subtitle    = element_text(colour = "grey40"),
+    panel.grid.minor = element_blank()
+  )
+
+p1
+```
+
+## Plot 2: South Africa — Inflation vs Policy Rate %
+
+This plot overlays South Africa's monthly CPI inflation rate and the SARB central bank policy rate from 2010 to 2023. Plotting both series together allows us to observe how the policy rate moves in relation to inflation over time, providing a visual test of the SARB's inflation-targeting behaviour.
+
+```{r plot2, fig.width=10, fig.height=5}
+p2 <- ggplot(monetary_policy, aes(x = date, y = value, colour = indicator)) +
+  geom_line(linewidth = 0.9) +
+  scale_colour_manual(values = c(
+    "CPI Inflation (%)"  = "#CC79A7",
+    "Policy Rate (%)"    = "#009E73"
+  )) +
+  scale_y_continuous(labels = label_number(suffix = "%")) +
+  scale_x_date(date_breaks = "3 years", date_labels = "%Y") +
+  labs(
+    title    = "South Africa: CPI Inflation vs Policy Rate (2000–2023)",
+    subtitle = "The SARB typically raises the prime rate in response to rising inflation,\nreflecting an inflation-targeting monetary policy framework.",
+    x        = NULL,
+    y        = "Percent (%)",
+    colour   = NULL,
+    caption  = "Source: FRED (OECD / World Bank)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position  = "top",
+    plot.title       = element_text(face = "bold"),
+    plot.subtitle    = element_text(colour = "grey40"),
+    panel.grid.minor = element_blank()
+  )
+
+p2
+```
+
+## Saving plots into the Figures folder
+
+```{r}
+ggsave("figures/unemployment.png", p1, width = 8, height = 5)
+ggsave("figures/inflation.png", p2, width = 8, height = 5)
+```
+

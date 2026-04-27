@@ -1,0 +1,283 @@
+MACRO871 Project README
+================
+MISS KKN
+2026-04-15
+
+# First Submission Intro
+
+This is a README for our Macroeconomics Master’s Project. This first
+part will display the code primarily used to complete the necessary
+output for the first submission.
+
+## Alt Table 3: Data Moments
+
+In particular, this section focuses on the method used to complete Table
+3 (data). We chose to use US data. In this version, I used the working
+age population as my population variable. I was also advised to alter
+the quarter period from 1982-04-01 - 2025-12-31 to 1982-01-01 -
+2025-07-01. I get extremely similar results. I presume this is due to
+the logging and HP filter.
+
+I will note the differences in results through my commits in Git. These
+results do not seem to deviate very much from my initial findings and
+so, primary markdown. Final big change was the variables used to
+generate the gross quarterly inflation. I am sure this will alter the
+results in the direction I’d been hoping for.
+
+First, install the required packages. Only run this once:
+install.packages(c(“fredr”, “mFilter”, “tidyverse”))
+
+``` r
+# US quarterly data 1982Q1–2025Q4
+
+# My free FRED API key: 093ea723771d7484291768514f217ffa
+library(fredr)
+library(mFilter)
+```
+
+    ## Warning: package 'mFilter' was built under R version 4.3.3
+
+``` r
+library(tidyverse)
+```
+
+    ## ── Attaching core tidyverse packages ──────────────────────── tidyverse 2.0.0 ──
+    ## ✔ dplyr     1.1.3     ✔ readr     2.1.4
+    ## ✔ forcats   1.0.0     ✔ stringr   1.5.0
+    ## ✔ ggplot2   3.4.4     ✔ tibble    3.2.1
+    ## ✔ lubridate 1.9.3     ✔ tidyr     1.3.0
+    ## ✔ purrr     1.0.2     
+    ## ── Conflicts ────────────────────────────────────────── tidyverse_conflicts() ──
+    ## ✖ dplyr::filter() masks stats::filter()
+    ## ✖ dplyr::lag()    masks stats::lag()
+    ## ℹ Use the conflicted package (<http://conflicted.r-lib.org/>) to force all conflicts to become errors
+
+``` r
+#Setting my FRED API key
+cat('FRED_API_KEY=093ea723771d7484291768514f217ffa\n', file = "~/.Renviron", append = TRUE)
+Sys.setenv(FRED_API_KEY = "093ea723771d7484291768514f217ffa")
+fred_key <- Sys.getenv("FRED_API_KEY")
+
+fredr_set_key(fred_key)
+
+#Fetching the quarterly data series 
+cat("Fetching FRED data...\n")
+```
+
+    ## Fetching FRED data...
+
+``` r
+fetch <- function(id, start = "1982-01-01", end = "2025-07-01") {
+  fredr(series_id = id,
+        observation_start = as.Date(start),
+        observation_end = as.Date(end)) %>%
+    select(date, value) %>%
+    rename(!!id := value)
+}
+
+gdp      <- fetch("GDPC1") #realGDP 
+cons     <- fetch("PCECC96")  #realconsumption bc in model everything is already divided by PT
+debt_nom <- fetch("GFDEBTN")  #nominal government debt   
+deflator <- fetch("GDPDEF") #'officicial GDP deflator to be used as 'aggre price for nominal to real conversion'
+
+#Converting monthly series into quarterly for consistency 
+
+fetch_monthly_to_q <- function(id, start = "1982-01-01", end = "2025-07-01") {
+  fredr(series_id = id,
+        observation_start = as.Date(start),
+        observation_end = as.Date(end)) %>%
+    mutate(quarter = floor_date(date, "quarter")) %>%
+    group_by(quarter) %>%
+    summarise(!!id := mean(value, na.rm = TRUE)) %>%
+    rename(date = quarter)
+} #function for conversion
+
+#conversion 
+pop <- fetch_monthly_to_q("LFWA64TTUSM647S") #Civilian population as persons, using working age OECD/more closely aligned with SA labour rules for working age population
+ffr <- fetch_monthly_to_q("FEDFUNDS")
+
+# Merge all series
+
+df <- gdp %>%
+  inner_join(cons, by = "date") %>%
+  inner_join(debt_nom, by = "date") %>%
+  inner_join(deflator, by = "date") %>%
+  inner_join(ffr, by = "date") %>%
+  inner_join(pop, by = "date") %>%
+  drop_na()
+
+cat(sprintf("Sample: %d quarterly observations\n", nrow(df)))
+```
+
+    ## Sample: 175 quarterly observations
+
+``` r
+# Transformations
+
+df <- df %>%
+  mutate(
+    # Per capita (GDP/cons in billions, pop already in persons => per person in dollars) 
+    gdp_pc  = (GDPC1 * 1e9) / (LFWA64TTUSM647S),
+    cons_pc = (PCECC96 * 1e9) / (LFWA64TTUSM647S),
+    
+    # Real debt: deflate nominal debt (millions) /  deflator ( conv. to get in percentage/decimal terms)
+    debt_real = (GFDEBTN * 1e6) / (GDPDEF / 100),
+    debt_pc   = debt_real / (LFWA64TTUSM647S), # real debt/ popn => real debt per capita
+    
+    # Log transform (per capita variables)
+    ln_gdp  = log(gdp_pc),
+    ln_cons = log(cons_pc),
+    ln_debt = log(debt_pc),
+    
+    # Inflation rate (pi_t) => gross quarterly inflation: Pi_t = P_t / P_{t-1} using GDP Deflator instead of CPI 
+    pi_gross = log(GDPDEF) / log(lag(GDPDEF)), 
+    
+    # Gross quarterly interest rate: 1 + FFR/400
+    R_gross = 1 + FEDFUNDS / 400
+  ) %>%
+  drop_na()
+
+#HP filter with lamda recomm from search for DSGE modelling = 1600
+
+hp_gdp  <- hpfilter(df$ln_gdp,  freq = 1600)
+hp_cons <- hpfilter(df$ln_cons, freq = 1600)
+hp_debt <- hpfilter(df$ln_debt, freq = 1600)
+
+df$gdp_cycle  <- hp_gdp$cycle
+df$cons_cycle <- hp_cons$cycle
+df$debt_cycle <- hp_debt$cycle
+
+#Calculating the moments 
+
+variables <- tibble(
+  Variables = c("Output", "Household consumption", "Inflation (CPI)",
+           "Public debt", "Federal funds rate"),
+  col  = c("gdp_cycle", "cons_cycle", "pi_gross",
+           "debt_cycle", "R_gross")
+)
+
+results <- variables %>%
+  rowwise() %>%
+  mutate(
+    Standard_Deviation_pct = sd(df[[col]]) * 100,
+    CorrelationwOutput = cor(df[[col]], df$gdp_cycle)
+)
+
+
+#Printing Table 3(3)... lolll (_3 = "post Liu advice table")
+cat("\n")
+```
+
+``` r
+cat(strrep("=", 65), "\n")
+```
+
+    ## =================================================================
+
+``` r
+cat("TABLE 3(3) — Business Cycle Properties (DATA)\n")
+```
+
+    ## TABLE 3(3) — Business Cycle Properties (DATA)
+
+``` r
+cat(strrep("=", 65), "\n")
+```
+
+    ## =================================================================
+
+``` r
+cat(sprintf("%-25s %-14s %-14s\n", "Variables", "Std Dev (%)", "Corr(x,y)"))
+```
+
+    ## Variables                 Std Dev (%)    Corr(x,y)
+
+``` r
+cat(strrep("-", 65), "\n")
+```
+
+    ## -----------------------------------------------------------------
+
+``` r
+for (i in 1:nrow(results)) {
+  cat(sprintf("%-25s %-14.4f %-14.4f\n",
+              results$Variables[i], results$Standard_Deviation_pct[i], results$CorrelationwOutput[i]))
+}
+```
+
+    ## Output                    1.2387         1.0000        
+    ## Household consumption     1.2379         0.8854        
+    ## Inflation (CPI)           0.0800         0.2782        
+    ## Public debt               2.5605         -0.3609       
+    ## Federal funds rate        0.7850         0.2485
+
+``` r
+cat(strrep("-", 65), "\n")
+```
+
+    ## -----------------------------------------------------------------
+
+``` r
+cat("Note: HP(1600), per capita (LFWA64TTUSM647S), log.\n")
+```
+
+    ## Note: HP(1600), per capita (LFWA64TTUSM647S), log.
+
+``` r
+cat("Inflation & FFR in gross quarterly terms.\n")
+```
+
+    ## Inflation & FFR in gross quarterly terms.
+
+``` r
+cat(sprintf("Observations: %d\n", nrow(df)))
+```
+
+    ## Observations: 174
+
+``` r
+#Saving it to CSV 
+write.csv(results %>% select(Variables, Standard_Deviation_pct, CorrelationwOutput),
+          "Table3(2)_Data_Results_KKN.csv", row.names = FALSE)
+cat("\nResults saved to Table3(2)_Data_Results_KKN.csv\n")
+```
+
+    ## 
+    ## Results saved to Table3(2)_Data_Results_KKN.csv
+
+``` r
+#Print Table for README [neat and easier than manually aligning borders method] 
+library(knitr)
+
+cat("\n\n### Table 3(3) — Business Cycle Properties (Data)\n\n")
+```
+
+    ## 
+    ## 
+    ## ### Table 3(3) — Business Cycle Properties (Data)
+
+``` r
+results %>%
+  select(Variables, Standard_Deviation_pct, CorrelationwOutput) %>%
+  kable(
+    col.names = c("Variables", "Std Dev (%)", "Corr(x,y)"),
+    digits = 4,
+    align = "lcc"
+  )
+```
+
+    ## Warning: 'xfun::attr()' is deprecated.
+    ## Use 'xfun::attr2()' instead.
+    ## See help("Deprecated")
+
+    ## Warning: 'xfun::attr()' is deprecated.
+    ## Use 'xfun::attr2()' instead.
+    ## See help("Deprecated")
+
+| Variables             | Std Dev (%) | Corr(x,y) |
+|:----------------------|:-----------:|:---------:|
+| Output                |   1.2387    |  1.0000   |
+| Household consumption |   1.2379    |  0.8854   |
+| Inflation (CPI)       |   0.0800    |  0.2782   |
+| Public debt           |   2.5605    |  -0.3609  |
+| Federal funds rate    |   0.7850    |  0.2485   |
