@@ -11,8 +11,8 @@ gc() # garbage collection - It can be useful to call gc after a large object has
 ```
 
     ##           used (Mb) gc trigger (Mb) limit (Mb) max used (Mb)
-    ## Ncells  563309 30.1    1251630 66.9         NA   715648 38.3
-    ## Vcells 1076811  8.3    8388608 64.0      16384  2010398 15.4
+    ## Ncells  559949 30.0    1242000 66.4         NA   715708 38.3
+    ## Vcells 1073614  8.2    8388608 64.0      16384  2010578 15.4
 
 ``` r
 # Installation of the required packages and loading them
@@ -280,3 +280,57 @@ p2
 ggsave("figures/unemployment.png", p1, width = 8, height = 5)
 ggsave("figures/inflation.png", p2, width = 8, height = 5)
 ```
+
+## Analysis of Graphs/ Images
+
+### Plot 1: Unemployment — South Africa vs Turkey
+
+Observation: SA unemployment sits stubbornly between 25–35%, while
+Turkey’s tracks far lower at roughly 8–13% across the same period.
+
+Intuition: This isn’t just a gap in numbers — it reflects fundamentally
+different labour market architectures. Turkey’s unemployment, while
+volatile, responds to the business cycle the way standard macroeconomic
+models predict: it rises in downturns and recovers with growth. South
+Africa’s doesn’t. The rate barely budges across booms or busts, which is
+the hallmark of structural unemployment — unemployment that persists
+regardless of aggregate demand conditions.
+
+The deeper story is a skills-geography mismatch inherited from apartheid
+spatial planning. Workers are concentrated far from economic activity,
+and the education system has not produced the technical skills that a
+modern economy demands. This means that even when firms want to hire,
+the frictions are too high. Standard monetary or fiscal stimulus cannot
+fix this — it is a supply-side, institutional problem. The post-2020 dip
+is worth flagging: it almost certainly reflects discouraged worker
+effects, where people stopped looking for work during lockdowns and
+technically exited the labour force, artificially deflating the measured
+rate rather than indicating genuine job creation.
+
+### Plot 2: SA Inflation vs Policy Rate
+
+Observation: The policy rate broadly follows inflation, with notable
+cuts in 2020 and aggressive hikes post-2021.
+
+Intuition: What this plot really shows is the tension at the heart of
+inflation targeting in a developing economy. The SARB’s mandate is price
+stability — keep inflation within 3–6% — and the plot confirms it
+broadly honours that mandate. But the cost is significant. Every time
+the SARB raises rates to cool inflation, it raises the cost of credit
+across the economy — for firms trying to invest and for households
+already under financial pressure.
+
+The post-2021 hiking cycle is particularly interesting. SA inflation was
+being driven largely by imported cost-push pressures — global energy
+prices, supply chain disruptions, a weakening rand — none of which a
+rate hike directly addresses. Raising rates in this environment tightens
+domestic demand to offset external price pressure, which is effective
+for the inflation number but does nothing to fix the underlying shock,
+and potentially deepens unemployment further. This is the classic
+impossible trinity of developing-economy monetary policy: you are
+simultaneously trying to defend price stability, support growth, and
+manage currency volatility, and the tools are blunt.
+
+The 2020 rate cuts are the more intuitive story — a demand collapse
+warranted monetary easing, and the SARB acted decisively by its own
+historical standards.
