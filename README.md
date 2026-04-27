@@ -1,3 +1,4 @@
+
 # Purpose
 
 The purpose of this folder is to complete a collaborate exercise working
@@ -11,8 +12,8 @@ gc() # garbage collection - It can be useful to call gc after a large object has
 ```
 
     ##           used (Mb) gc trigger (Mb) limit (Mb) max used (Mb)
-    ## Ncells  559949 30.0    1242000 66.4         NA   715708 38.3
-    ## Vcells 1073614  8.2    8388608 64.0      16384  2010578 15.4
+    ## Ncells  562026 30.1    1247934 66.7         NA   715708 38.3
+    ## Vcells 1077937  8.3    8388608 64.0      16384  2010578 15.4
 
 ``` r
 # Installation of the required packages and loading them
@@ -89,7 +90,7 @@ pressure.
 # Variables Used
 
 | Variable | FRED Series ID | Description | Frequency |
-|------------------|------------------|------------------|------------------|
+|----|----|----|----|
 | SA Unemployment Rate | `LRUN64TTZAQ156S` | Percentage of the labour force that is unemployed in South Africa (ILO estimate) | Quarterly |
 | Turkey Unemployment Rate | `LRUNTTTTTRQ156S` | Percentage of the labour force that is unemployed in Turkey (ILO estimate) | Quarterly |
 | SA CPI Inflation | `ZAFCPIALLMINMEI` | Consumer Price Index for all items in South Africa, used to measure year-on-year inflation | Monthly |
@@ -234,7 +235,7 @@ p1 <- ggplot(unemp_combined, aes(x = date, y = unemployment_rate, colour = count
 p1
 ```
 
-![](README_files/figure-markdown_github/plot1-1.png)
+![](README_files/figure-gfm/plot1-1.png)<!-- -->
 
 ## Plot 2: South Africa — Inflation vs Policy Rate %
 
@@ -272,7 +273,7 @@ p2 <- ggplot(monetary_policy, aes(x = date, y = value, colour = indicator)) +
 p2
 ```
 
-![](README_files/figure-markdown_github/plot2-1.png)
+![](README_files/figure-gfm/plot2-1.png)<!-- -->
 
 ## Saving plots into the Figures folder
 
@@ -281,7 +282,7 @@ ggsave("figures/unemployment.png", p1, width = 8, height = 5)
 ggsave("figures/inflation.png", p2, width = 8, height = 5)
 ```
 
-## Analysis of Graphs/ Images
+## Analysis of Plots/ Images
 
 ### Plot 1: Unemployment — South Africa vs Turkey
 

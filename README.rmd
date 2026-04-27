@@ -215,7 +215,7 @@ ggsave("figures/inflation.png", p2, width = 8, height = 5)
 ```
 
 
-## Analysis of Figures/ Images 
+## Analysis of Plots/ Images 
 
 ### Plot 1: Unemployment — South Africa vs Turkey
 Observation: SA unemployment sits stubbornly between 25–35%, while Turkey's tracks far lower at roughly 8–13% across the same period.
